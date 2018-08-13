@@ -3,17 +3,20 @@ enable_language(C)
 
 set(LAPACK_INSTALL_EXPORT_NAME lapacke-targets)
 
-# Create a header file lapacke_mangling.h for the routines called in my C programs
-include(FortranCInterface)
-## Ensure that the fortran compiler and c compiler specified are compatible
-FortranCInterface_VERIFY()
-FortranCInterface_HEADER(${LAPACK_BINARY_DIR}/include/lapacke_mangling.h
-  MACRO_NAMESPACE "LAPACK_"
-  SYMBOL_NAMESPACE "LAPACK_")
+if(LAPACK)
+  # Create a header file lapacke_mangling.h for the routines called in my C programs
+  include(FortranCInterface)
+  ## Ensure that the fortran compiler and c compiler specified are compatible
+  FortranCInterface_VERIFY()
+  FortranCInterface_HEADER(${LAPACK_BINARY_DIR}/include/lapacke_mangling.h
+    MACRO_NAMESPACE "LAPACK_"
+    SYMBOL_NAMESPACE "LAPACK_")
+endif()
+
 if(NOT FortranCInterface_GLOBAL_FOUND OR NOT FortranCInterface_MODULE_FOUND)
   message(WARNING "Reverting to pre-defined include/lapacke_mangling.h")
   configure_file(include/lapacke_mangling_with_flags.h.in
-                 ${LAPACK_BINARY_DIR}/include/lapacke_mangling.h)
+    ${LAPACK_BINARY_DIR}/include/lapacke_mangling.h)
 endif()
 
 if(WIN32 AND NOT UNIX)
@@ -68,14 +71,16 @@ target_include_directories(lapacke PUBLIC
 if(LAPACKE_WITH_TMG)
   target_link_libraries(lapacke PRIVATE tmglib)
 endif()
-target_link_libraries(lapacke PRIVATE ${LAPACK_LIBRARIES})
+message("***************** {LAPACK_LIBRARIES} ${LAPACK_LIBRARIES}")
+#target_link_libraries(lapacke PRIVATE ${LAPACK_LIBRARIES})
+target_link_libraries(lapacke PRIVATE lapack_c)
 
 lapack_install_library(lapacke)
 install(FILES ${LAPACKE_INCLUDE} ${LAPACK_BINARY_DIR}/include/lapacke_mangling.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-if(BUILD_TESTING)
+# if(BUILD_TESTING)
   add_subdirectory(example)
-endif()
+# endif()
 
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/lapacke.pc.in ${CMAKE_CURRENT_BINARY_DIR}/lapacke.pc @ONLY)

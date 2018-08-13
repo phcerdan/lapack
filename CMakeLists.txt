@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8.12)
 
-project(LAPACK Fortran C)
+project(LAPACK C)
 
 set(LAPACK_MAJOR_VERSION 3)
 set(LAPACK_MINOR_VERSION 8)
@@ -10,6 +10,10 @@ set(
   ${LAPACK_MAJOR_VERSION}.${LAPACK_MINOR_VERSION}.${LAPACK_PATCH_VERSION}
   )
 
+option(LAPACK "Build LAPACK. Requires Fortran compiler." OFF)
+if(LAPACK)
+  enable_language(Fortran)
+endif()
 # Add the CMake directory for custon CMake modules
 set(CMAKE_MODULE_PATH "${LAPACK_SOURCE_DIR}/CMAKE" ${CMAKE_MODULE_PATH})
 
@@ -60,45 +64,47 @@ configure_file(
 include(PreventInSourceBuilds)
 include(PreventInBuildInstalls)
 
-if(UNIX)
-  if("${CMAKE_Fortran_COMPILER}" MATCHES "ifort")
-    set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fp-model strict")
+if(LAPACK)
+  if(UNIX)
+    if("${CMAKE_Fortran_COMPILER}" MATCHES "ifort")
+      set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fp-model strict")
+    endif()
+    if("${CMAKE_Fortran_COMPILER}" MATCHES "xlf")
+      set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -qnosave -qstrict=none")
+    endif()
+  # Delete libmtsk in linking sequence for Sun/Oracle Fortran Compiler.
+  # This library is not present in the Sun package SolarisStudio12.3-linux-x86-bin
+    string(REPLACE \;mtsk\; \; CMAKE_Fortran_IMPLICIT_LINK_LIBRARIES "${CMAKE_Fortran_IMPLICIT_LINK_LIBRARIES}")
   endif()
-  if("${CMAKE_Fortran_COMPILER}" MATCHES "xlf")
-    set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -qnosave -qstrict=none")
-  endif()
-# Delete libmtsk in linking sequence for Sun/Oracle Fortran Compiler.
-# This library is not present in the Sun package SolarisStudio12.3-linux-x86-bin
-  string(REPLACE \;mtsk\; \; CMAKE_Fortran_IMPLICIT_LINK_LIBRARIES "${CMAKE_Fortran_IMPLICIT_LINK_LIBRARIES}")
-endif()
 
-if(CMAKE_Fortran_COMPILER_ID STREQUAL "Compaq")
-  if(WIN32)
-    if(CMAKE_GENERATOR STREQUAL "NMake Makefiles")
-      get_filename_component(CMAKE_Fortran_COMPILER_CMDNAM ${CMAKE_Fortran_COMPILER} NAME_WE)
-      message(STATUS "Using Compaq Fortran compiler with command name ${CMAKE_Fortran_COMPILER_CMDNAM}")
-      set(cmd ${CMAKE_Fortran_COMPILER_CMDNAM})
-      string(TOLOWER "${cmd}" cmdlc)
-      if(cmdlc STREQUAL "df")
-        message(STATUS "Assume the Compaq Visual Fortran Compiler is being used")
-        set(CMAKE_Fortran_USE_RESPONSE_FILE_FOR_OBJECTS 1)
-        set(CMAKE_Fortran_USE_RESPONSE_FILE_FOR_INCLUDES 1)
-        #This is a workaround that is needed to avoid forward-slashes in the
-        #filenames listed in response files from incorrectly being interpreted as
-        #introducing compiler command options
-        if(${BUILD_SHARED_LIBS})
-          message(FATAL_ERROR "Making of shared libraries with CVF has not been tested.")
+  if(CMAKE_Fortran_COMPILER_ID STREQUAL "Compaq")
+    if(WIN32)
+      if(CMAKE_GENERATOR STREQUAL "NMake Makefiles")
+        get_filename_component(CMAKE_Fortran_COMPILER_CMDNAM ${CMAKE_Fortran_COMPILER} NAME_WE)
+        message(STATUS "Using Compaq Fortran compiler with command name ${CMAKE_Fortran_COMPILER_CMDNAM}")
+        set(cmd ${CMAKE_Fortran_COMPILER_CMDNAM})
+        string(TOLOWER "${cmd}" cmdlc)
+        if(cmdlc STREQUAL "df")
+          message(STATUS "Assume the Compaq Visual Fortran Compiler is being used")
+          set(CMAKE_Fortran_USE_RESPONSE_FILE_FOR_OBJECTS 1)
+          set(CMAKE_Fortran_USE_RESPONSE_FILE_FOR_INCLUDES 1)
+          #This is a workaround that is needed to avoid forward-slashes in the
+          #filenames listed in response files from incorrectly being interpreted as
+          #introducing compiler command options
+          if(${BUILD_SHARED_LIBS})
+            message(FATAL_ERROR "Making of shared libraries with CVF has not been tested.")
+          endif()
+          set(str "NMake version 9 or later should be used. NMake version 6.0 which is\n")
+          set(str "${str}   included with the CVF distribution fails to build Lapack because\n")
+          set(str "${str}   the number of source files exceeds the limit for NMake v6.0\n")
+          message(STATUS ${str})
+          set(CMAKE_Fortran_LINK_EXECUTABLE "LINK /out:<TARGET> <LINK_FLAGS> <LINK_LIBRARIES> <OBJECTS>")
         endif()
-        set(str "NMake version 9 or later should be used. NMake version 6.0 which is\n")
-        set(str "${str}   included with the CVF distribution fails to build Lapack because\n")
-        set(str "${str}   the number of source files exceeds the limit for NMake v6.0\n")
-        message(STATUS ${str})
-        set(CMAKE_Fortran_LINK_EXECUTABLE "LINK /out:<TARGET> <LINK_FLAGS> <LINK_LIBRARIES> <OBJECTS>")
       endif()
     endif()
   endif()
-endif()
 
+endif()
 # Get Python
 message(STATUS "Looking for Python greater than 2.6 - ${PYTHONINTERP_FOUND}")
 find_package(PythonInterp 2.7) # lapack_testing.py uses features from python 2.7 and greater
@@ -145,62 +151,145 @@ CheckLAPACKCompilerFlags()
 # --------------------------------------------------
 # Check second function
 
-include(CheckTimeFunction)
-set(TIME_FUNC NONE ${TIME_FUNC})
-CHECK_TIME_FUNCTION(NONE TIME_FUNC)
-CHECK_TIME_FUNCTION(INT_CPU_TIME TIME_FUNC)
-CHECK_TIME_FUNCTION(EXT_ETIME TIME_FUNC)
-CHECK_TIME_FUNCTION(EXT_ETIME_ TIME_FUNC)
-CHECK_TIME_FUNCTION(INT_ETIME TIME_FUNC)
-message(STATUS "--> Will use second_${TIME_FUNC}.f and dsecnd_${TIME_FUNC}.f as timing function.")
+if(LAPACK)
+  include(CheckTimeFunction)
+  set(TIME_FUNC NONE ${TIME_FUNC})
+  CHECK_TIME_FUNCTION(NONE TIME_FUNC)
+  CHECK_TIME_FUNCTION(INT_CPU_TIME TIME_FUNC)
+  CHECK_TIME_FUNCTION(EXT_ETIME TIME_FUNC)
+  CHECK_TIME_FUNCTION(EXT_ETIME_ TIME_FUNC)
+  CHECK_TIME_FUNCTION(INT_ETIME TIME_FUNC)
+  message(STATUS "--> Will use second_${TIME_FUNC}.f and dsecnd_${TIME_FUNC}.f as timing function.")
 
-set(SECOND_SRC ${LAPACK_SOURCE_DIR}/INSTALL/second_${TIME_FUNC}.f)
-set(DSECOND_SRC ${LAPACK_SOURCE_DIR}/INSTALL/dsecnd_${TIME_FUNC}.f)
+  set(SECOND_SRC ${LAPACK_SOURCE_DIR}/INSTALL/second_${TIME_FUNC}.f)
+  set(DSECOND_SRC ${LAPACK_SOURCE_DIR}/INSTALL/dsecnd_${TIME_FUNC}.f)
 
-# deprecated LAPACK and LAPACKE routines
-option(BUILD_DEPRECATED "Build deprecated routines" OFF)
-message(STATUS "Build deprecated routines: ${BUILD_DEPRECATED}")
+  # deprecated LAPACK and LAPACKE routines
+  option(BUILD_DEPRECATED "Build deprecated routines" OFF)
+  message(STATUS "Build deprecated routines: ${BUILD_DEPRECATED}")
 
-# --------------------------------------------------
-# Precision to build
-# By default all precisions are generated
-option(BUILD_SINGLE "Build single precision real" ON)
-option(BUILD_DOUBLE "Build double precision real" ON)
-option(BUILD_COMPLEX "Build single precision complex" ON)
-option(BUILD_COMPLEX16 "Build double precision complex" ON)
-message(STATUS "Build single precision real: ${BUILD_SINGLE}")
-message(STATUS "Build double precision real: ${BUILD_DOUBLE}")
-message(STATUS "Build single precision complex: ${BUILD_COMPLEX}")
-message(STATUS "Build double precision complex: ${BUILD_COMPLEX16}")
+  # --------------------------------------------------
+  # Precision to build
+  # By default all precisions are generated
+  option(BUILD_SINGLE "Build single precision real" ON)
+  option(BUILD_DOUBLE "Build double precision real" ON)
+  option(BUILD_COMPLEX "Build single precision complex" ON)
+  option(BUILD_COMPLEX16 "Build double precision complex" ON)
+  message(STATUS "Build single precision real: ${BUILD_SINGLE}")
+  message(STATUS "Build double precision real: ${BUILD_DOUBLE}")
+  message(STATUS "Build single precision complex: ${BUILD_COMPLEX}")
+  message(STATUS "Build double precision complex: ${BUILD_COMPLEX16}")
 
-if(NOT (BUILD_SINGLE OR BUILD_DOUBLE OR BUILD_COMPLEX OR BUILD_COMPLEX16))
-  message(FATAL_ERROR "Nothing to build, no precision selected.
-  Please enable at least one of these:
-  BUILD_SINGLE, BUILD_DOUBLE, BUILD_COMPLEX, BUILD_COMPLEX16.")
-endif()
-
-# --------------------------------------------------
-# Subdirectories that need to be processed
-option(USE_OPTIMIZED_BLAS "Whether or not to use an optimized BLAS library instead of included netlib BLAS" OFF)
-
-# Check the usage of the user provided BLAS libraries
-if(BLAS_LIBRARIES)
-  include(CheckFortranFunctionExists)
-  set(CMAKE_REQUIRED_LIBRARIES ${BLAS_LIBRARIES})
-  CHECK_FORTRAN_FUNCTION_EXISTS("dgemm" BLAS_FOUND)
-  unset(CMAKE_REQUIRED_LIBRARIES)
-  if(BLAS_FOUND)
-    message(STATUS "--> BLAS supplied by user is WORKING, will use ${BLAS_LIBRARIES}.")
-  else()
-    message(ERROR "--> BLAS supplied by user is not WORKING, CANNOT USE ${BLAS_LIBRARIES}.")
-    message(ERROR "-->     Will use REFERENCE BLAS (by default)")
-    message(ERROR "-->     Or Correct your BLAS_LIBRARIES entry ")
-    message(ERROR "-->     Or Consider checking USE_OPTIMIZED_BLAS")
+  if(NOT (BUILD_SINGLE OR BUILD_DOUBLE OR BUILD_COMPLEX OR BUILD_COMPLEX16))
+    message(FATAL_ERROR "Nothing to build, no precision selected.
+    Please enable at least one of these:
+    BUILD_SINGLE, BUILD_DOUBLE, BUILD_COMPLEX, BUILD_COMPLEX16.")
   endif()
 
-# User did not provide a BLAS Library but specified to search for one
-elseif(USE_OPTIMIZED_BLAS)
-  find_package(BLAS)
+  # --------------------------------------------------
+  # Subdirectories that need to be processed
+  option(USE_OPTIMIZED_BLAS "Whether or not to use an optimized BLAS library instead of included netlib BLAS" OFF)
+
+  # Check the usage of the user provided BLAS libraries
+  if(BLAS_LIBRARIES)
+    include(CheckFortranFunctionExists)
+    set(CMAKE_REQUIRED_LIBRARIES ${BLAS_LIBRARIES})
+    CHECK_FORTRAN_FUNCTION_EXISTS("dgemm" BLAS_FOUND)
+    unset(CMAKE_REQUIRED_LIBRARIES)
+    if(BLAS_FOUND)
+      message(STATUS "--> BLAS supplied by user is WORKING, will use ${BLAS_LIBRARIES}.")
+    else()
+      message(ERROR "--> BLAS supplied by user is not WORKING, CANNOT USE ${BLAS_LIBRARIES}.")
+      message(ERROR "-->     Will use REFERENCE BLAS (by default)")
+      message(ERROR "-->     Or Correct your BLAS_LIBRARIES entry ")
+      message(ERROR "-->     Or Consider checking USE_OPTIMIZED_BLAS")
+    endif()
+
+  # User did not provide a BLAS Library but specified to search for one
+  elseif(USE_OPTIMIZED_BLAS)
+    find_package(BLAS)
+  endif()
+
+  # Neither user specified or optimized BLAS libraries can be used
+  if(NOT BLAS_FOUND)
+    message(STATUS "Using supplied NETLIB BLAS implementation")
+    add_subdirectory(BLAS)
+    set(BLAS_LIBRARIES blas)
+  else()
+    set(CMAKE_EXE_LINKER_FLAGS
+      "${CMAKE_EXE_LINKER_FLAGS} ${BLAS_LINKER_FLAGS}"
+      CACHE STRING "Linker flags for executables" FORCE)
+    set(CMAKE_MODULE_LINKER_FLAGS
+      "${CMAKE_MODULE_LINKER_FLAGS} ${BLAS_LINKER_FLAGS}"
+      CACHE STRING "Linker flags for modules" FORCE)
+    set(CMAKE_SHARED_LINKER_FLAGS
+      "${CMAKE_SHARED_LINKER_FLAGS} ${BLAS_LINKER_FLAGS}"
+      CACHE STRING "Linker flags for shared libs" FORCE)
+  endif()
+
+
+  # --------------------------------------------------
+  # CBLAS
+  option(CBLAS "Build CBLAS" OFF)
+
+  if(CBLAS)
+    add_subdirectory(CBLAS)
+  endif()
+
+  # --------------------------------------------------
+  # XBLAS
+
+  option(USE_XBLAS "Build extended precision (needs XBLAS)" OFF)
+  if(USE_XBLAS)
+    find_library(XBLAS_LIBRARY NAMES xblas)
+  endif()
+
+  option(USE_OPTIMIZED_LAPACK "Whether or not to use an optimized LAPACK library instead of included netlib LAPACK" OFF)
+
+  # --------------------------------------------------
+  # LAPACK
+  # User did not provide a LAPACK Library but specified to search for one
+  if(USE_OPTIMIZED_LAPACK)
+    find_package(LAPACK)
+  endif()
+
+  # Check the usage of the user provided or automatically found LAPACK libraries
+  if(LAPACK_LIBRARIES)
+    include(CheckFortranFunctionExists)
+    set(CMAKE_REQUIRED_LIBRARIES ${LAPACK_LIBRARIES})
+    # Check if new routine of 3.4.0 is in LAPACK_LIBRARIES
+    CHECK_FORTRAN_FUNCTION_EXISTS("dgeqrt" LATESTLAPACK_FOUND)
+    unset(CMAKE_REQUIRED_LIBRARIES)
+    if(LATESTLAPACK_FOUND)
+      message(STATUS "--> LAPACK supplied by user is WORKING, will use ${LAPACK_LIBRARIES}.")
+    else()
+      message(ERROR "--> LAPACK supplied by user is not WORKING or is older than LAPACK 3.4.0, CANNOT USE ${LAPACK_LIBRARIES}.")
+      message(ERROR "-->     Will use REFERENCE LAPACK (by default)")
+      message(ERROR "-->     Or Correct your LAPACK_LIBRARIES entry ")
+      message(ERROR "-->     Or Consider checking USE_OPTIMIZED_LAPACK")
+    endif()
+  endif()
+
+  # Neither user specified or optimized LAPACK libraries can be used
+  if(NOT LATESTLAPACK_FOUND)
+    message(STATUS "Using supplied NETLIB LAPACK implementation")
+    set(LAPACK_LIBRARIES lapack)
+    add_subdirectory(SRC)
+  else()
+    set(CMAKE_EXE_LINKER_FLAGS
+      "${CMAKE_EXE_LINKER_FLAGS} ${LAPACK_LINKER_FLAGS}"
+      CACHE STRING "Linker flags for executables" FORCE)
+    set(CMAKE_MODULE_LINKER_FLAGS
+      "${CMAKE_MODULE_LINKER_FLAGS} ${LAPACK_LINKER_FLAGS}"
+      CACHE STRING "Linker flags for modules" FORCE)
+    set(CMAKE_SHARED_LINKER_FLAGS
+      "${CMAKE_SHARED_LINKER_FLAGS} ${LAPACK_LINKER_FLAGS}"
+      CACHE STRING "Linker flags for shared libs" FORCE)
+  endif()
+
+  if(BUILD_TESTING)
+    add_subdirectory(TESTING)
+  endif()
 endif()
 
 # Neither user specified or optimized BLAS libraries can be used
@@ -208,82 +297,7 @@ if(NOT BLAS_FOUND)
   message(STATUS "Using supplied NETLIB BLAS implementation")
   add_subdirectory(BLAS)
   set(BLAS_LIBRARIES blas)
-else()
-  set(CMAKE_EXE_LINKER_FLAGS
-    "${CMAKE_EXE_LINKER_FLAGS} ${BLAS_LINKER_FLAGS}"
-    CACHE STRING "Linker flags for executables" FORCE)
-  set(CMAKE_MODULE_LINKER_FLAGS
-    "${CMAKE_MODULE_LINKER_FLAGS} ${BLAS_LINKER_FLAGS}"
-    CACHE STRING "Linker flags for modules" FORCE)
-  set(CMAKE_SHARED_LINKER_FLAGS
-    "${CMAKE_SHARED_LINKER_FLAGS} ${BLAS_LINKER_FLAGS}"
-    CACHE STRING "Linker flags for shared libs" FORCE)
 endif()
-
-
-# --------------------------------------------------
-# CBLAS
-option(CBLAS "Build CBLAS" OFF)
-
-if(CBLAS)
-  add_subdirectory(CBLAS)
-endif()
-
-# --------------------------------------------------
-# XBLAS
-
-option(USE_XBLAS "Build extended precision (needs XBLAS)" OFF)
-if(USE_XBLAS)
-  find_library(XBLAS_LIBRARY NAMES xblas)
-endif()
-
-option(USE_OPTIMIZED_LAPACK "Whether or not to use an optimized LAPACK library instead of included netlib LAPACK" OFF)
-
-# --------------------------------------------------
-# LAPACK
-# User did not provide a LAPACK Library but specified to search for one
-if(USE_OPTIMIZED_LAPACK)
-  find_package(LAPACK)
-endif()
-
-# Check the usage of the user provided or automatically found LAPACK libraries
-if(LAPACK_LIBRARIES)
-  include(CheckFortranFunctionExists)
-  set(CMAKE_REQUIRED_LIBRARIES ${LAPACK_LIBRARIES})
-  # Check if new routine of 3.4.0 is in LAPACK_LIBRARIES
-  CHECK_FORTRAN_FUNCTION_EXISTS("dgeqrt" LATESTLAPACK_FOUND)
-  unset(CMAKE_REQUIRED_LIBRARIES)
-  if(LATESTLAPACK_FOUND)
-    message(STATUS "--> LAPACK supplied by user is WORKING, will use ${LAPACK_LIBRARIES}.")
-  else()
-    message(ERROR "--> LAPACK supplied by user is not WORKING or is older than LAPACK 3.4.0, CANNOT USE ${LAPACK_LIBRARIES}.")
-    message(ERROR "-->     Will use REFERENCE LAPACK (by default)")
-    message(ERROR "-->     Or Correct your LAPACK_LIBRARIES entry ")
-    message(ERROR "-->     Or Consider checking USE_OPTIMIZED_LAPACK")
-  endif()
-endif()
-
-# Neither user specified or optimized LAPACK libraries can be used
-if(NOT LATESTLAPACK_FOUND)
-  message(STATUS "Using supplied NETLIB LAPACK implementation")
-  set(LAPACK_LIBRARIES lapack)
-  add_subdirectory(SRC)
-else()
-  set(CMAKE_EXE_LINKER_FLAGS
-    "${CMAKE_EXE_LINKER_FLAGS} ${LAPACK_LINKER_FLAGS}"
-    CACHE STRING "Linker flags for executables" FORCE)
-  set(CMAKE_MODULE_LINKER_FLAGS
-    "${CMAKE_MODULE_LINKER_FLAGS} ${LAPACK_LINKER_FLAGS}"
-    CACHE STRING "Linker flags for modules" FORCE)
-  set(CMAKE_SHARED_LINKER_FLAGS
-    "${CMAKE_SHARED_LINKER_FLAGS} ${LAPACK_LINKER_FLAGS}"
-    CACHE STRING "Linker flags for shared libs" FORCE)
-endif()
-
-if(BUILD_TESTING)
-  add_subdirectory(TESTING)
-endif()
-
 # --------------------------------------------------
 # LAPACKE
 option(LAPACKE "Build LAPACKE" OFF)
@@ -299,6 +313,7 @@ if(BUILD_TESTING OR LAPACKE_WITH_TMG) #already included, avoid double inclusion
 endif()
 
 if(LAPACKE)
+  add_subdirectory(CSRC)
   add_subdirectory(LAPACKE)
 endif()
 
@@ -308,9 +323,9 @@ endif()
 set(CPACK_PACKAGE_NAME "LAPACK")
 set(CPACK_PACKAGE_VENDOR "University of Tennessee, Univ. of California Berkeley, Univ. of Colorado Denver and NAG Ltd")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "LAPACK- Linear Algebra Package")
-set(CPACK_PACKAGE_VERSION_MAJOR 3)
-set(CPACK_PACKAGE_VERSION_MINOR 5)
-set(CPACK_PACKAGE_VERSION_PATCH 0)
+set(CPACK_PACKAGE_VERSION_MAJOR ${LAPACK_VERSION_MAJOR})
+set(CPACK_PACKAGE_VERSION_MINOR ${LAPACK_VERSION_MINOR})
+set(CPACK_PACKAGE_VERSION_PATCH ${LAPACK_VERSION_PATCH})
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY "LAPACK")
 if(WIN32 AND NOT UNIX)
@@ -333,11 +348,11 @@ include(CPack)
 
 # --------------------------------------------------
 
-if(NOT BLAS_FOUND)
+if(LAPACK AND NOT BLAS_FOUND)
   set(ALL_TARGETS ${ALL_TARGETS} blas)
 endif()
 
-if(NOT LATESTLAPACK_FOUND)
+if(LAPACK AND NOT LATESTLAPACK_FOUND)
   set(ALL_TARGETS ${ALL_TARGETS} lapack)
 endif()
 
